@@ -1,0 +1,5 @@
+.venv
+
+# gmail creds
+token.json
+credentials.json
