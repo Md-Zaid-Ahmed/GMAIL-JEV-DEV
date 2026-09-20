@@ -3,3 +3,6 @@
 # gmail creds
 token.json
 credentials.json
+
+#env 
+.env
