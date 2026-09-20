@@ -1,4 +1,6 @@
+import json
 import os.path
+import sys
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -6,15 +8,17 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from email_cleaner import normalize
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
+# Gmail subjects often contain emoji; the Windows console defaults to cp1252.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-def main():
-  """Shows basic usage of the Gmail API.
-  Lists the user's Gmail labels.
-  """
+
+def get_credentials():
+  """Loads saved credentials, running the browser consent flow if needed."""
   creds = None
   # The file token.json stores the user's access and refresh tokens, and is
   # created automatically when the authorization flow completes for the first
@@ -33,19 +37,38 @@ def main():
     # Save the credentials for the next run
     with open("token.json", "w") as token:
       token.write(creds.to_json())
+  return creds
 
+
+def fetch_unread(service, max_results=10):
+  """Returns unread emails as {sender, subject, body} dicts."""
+  results = service.users().messages().list(
+      userId="me",
+      q="is:unread",
+      maxResults=max_results,
+  ).execute()
+
+  emails = []
+  for message in results.get("messages", []):
+    msg = service.users().messages().get(
+        userId="me",
+        id=message["id"],
+        format="full",
+    ).execute()
+    emails.append(normalize(msg))
+  return emails
+
+
+def main():
   try:
-    # Call the Gmail API
-    service = build("gmail", "v1", credentials=creds)
-    results = service.users().labels().list(userId="me").execute()
-    labels = results.get("labels", [])
+    service = build("gmail", "v1", credentials=get_credentials())
+    emails = fetch_unread(service, max_results=10)
 
-    if not labels:
-      print("No labels found.")
+    if not emails:
+      print("No unread emails found.")
       return
-    print("Labels:")
-    for label in labels:
-      print(label["name"])
+
+    print(json.dumps(emails, indent=2, ensure_ascii=False))
 
   except HttpError as error:
     # TODO(developer) - Handle errors from gmail API.
